@@ -1,0 +1,35 @@
+#!/bin/bash
+
+set -xe
+
+shopt -s dotglob nullglob extglob
+
+echo "========================================"
+echo "============== PRE-BUILD ==============="
+echo "========================================"
+
+if [ -n "$SSH_PRIVATE_KEY" ]; then
+    echo "${SSH_PRIVATE_KEY}" | base64 --decode > $HOME/.ssh/id_rsa_dockerhub
+    chmod 400 $HOME/.ssh/id_rsa_dockerhub
+
+    eval $(ssh-agent -s)
+    ssh-add $HOME/.ssh/id_rsa_dockerhub
+    ssh-add $HOME/.ssh/id_rsa
+
+    # touch $HOME/.ssh/known_hosts
+    # ssh-keyscan bitbucket.org >> $HOME/.ssh/known_hosts
+fi
+
+# Dockerfile location = docker-hub/Dockerfile
+# Build Context = /
+# root(context) folder is {docker-hub}
+cd ..
+
+rm -rf ${LOCAL_APP_PATH}; mkdir ${LOCAL_APP_PATH}
+
+mv !(${LOCAL_APP_PATH}|docker-hub) ${LOCAL_APP_PATH}
+
+shopt -u dotglob
+
+# DOCKER FILES BUILD
+git clone ${DOCKER_REPOSITORY} docker

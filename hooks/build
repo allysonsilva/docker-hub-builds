@@ -1,0 +1,86 @@
+#!/bin/bash
+
+set -xe
+
+echo "========================================"
+echo "================ BUILD ================="
+echo "========================================"
+
+# SOURCE_BRANCH: the name of the branch or the tag that is currently.
+# SOURCE_COMMIT: the SHA1 hash of the commit.
+# COMMIT_MSG: the message from the commit.
+# DOCKER_REPO: the name of the Docker repository.
+# DOCKERFILE_PATH: the dockerfile currently.
+# DOCKER_TAG: the Docker repository tag.
+# IMAGE_NAME: the name and tag of the Docker repository. (This variable is a combination of DOCKER_REPO:DOCKER_TAG.)
+
+# drwxr-xr-x 5 root root 4096 .
+# drwxr-xr-x 3 root root 4096 ..
+# drwxr-xr-x 12 root root 4096 app
+# drwxr-xr-x 6 root root 4096 docker
+# drwxr-xr-x 3 root root 4096 docker-hub => (current)
+cd ..
+
+# If USE_REMOTE_DOCKER_CACHE is not set, set it to an empty variable
+USE_REMOTE_DOCKER_CACHE=${USE_REMOTE_DOCKER_CACHE:-true}
+
+if [ "${USE_REMOTE_DOCKER_CACHE}" = false ] ; then
+
+    # Use multi-stage build and buit-in layer caching
+    docker build \
+        --tag $IMAGE_NAME \
+        --tag $DOCKER_REPO:$SOURCE_BRANCH \
+        --file ${LOCAL_DOCKER_PATH}/php/Dockerfile \
+            --build-arg APP_ENV=$APP_ENV \
+            --build-arg REMOTE_SRC=$REMOTE_SRC \
+            --build-arg LOCAL_APP_PATH=$LOCAL_APP_PATH \
+            --build-arg LOCAL_DOCKER_PATH=$LOCAL_DOCKER_PATH \
+        .
+
+else
+
+    # Pull the latest {vendor} image from remote repository
+    docker pull $DOCKER_REPO:vendor || true
+
+    # Only build the 'vendor' stage, using pulled image as cache
+    docker build \
+        --target vendor \
+        --cache-from $DOCKER_REPO:vendor \
+        --tag $DOCKER_REPO:vendor \
+        --file ${LOCAL_DOCKER_PATH}/php/Dockerfile \
+            --build-arg LOCAL_APP_PATH=$LOCAL_APP_PATH \
+        .
+
+    # Pull the latest {frontend} image from remote repository
+    docker pull $DOCKER_REPO:frontend || true
+
+    # Only build the 'frontend' stage, using pulled image as cache
+    docker build \
+        --target frontend \
+        --cache-from $DOCKER_REPO:frontend \
+        --tag $DOCKER_REPO:frontend \
+        --file ${LOCAL_DOCKER_PATH}/php/Dockerfile \
+            --build-arg LOCAL_APP_PATH=$LOCAL_APP_PATH \
+        .
+
+    # Pull the ($IMAGE_NAME) runtime image from remote repository
+    docker pull $IMAGE_NAME || true
+    docker pull $DOCKER_REPO:$SOURCE_BRANCH || true
+
+    # Don't specify target (build whole Dockerfile)
+    # Uses the just-built builder image and the pulled runtime image as cache
+    docker build \
+        --cache-from $DOCKER_REPO:vendor \
+        --cache-from $DOCKER_REPO:frontend \
+        --cache-from $IMAGE_NAME \
+        --cache-from $DOCKER_REPO:$SOURCE_BRANCH \
+        --tag $IMAGE_NAME \
+        --tag $DOCKER_REPO:$SOURCE_BRANCH \
+        --file ${LOCAL_DOCKER_PATH}/php/Dockerfile \
+            --build-arg APP_ENV=$APP_ENV \
+            --build-arg REMOTE_SRC=$REMOTE_SRC \
+            --build-arg LOCAL_APP_PATH=$LOCAL_APP_PATH \
+            --build-arg LOCAL_DOCKER_PATH=$LOCAL_DOCKER_PATH \
+        .
+
+fi

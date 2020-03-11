@@ -1,0 +1,28 @@
+#!/bin/bash
+
+set -xe
+
+echo "========================================"
+echo "============== POST-PUSH ==============="
+echo "========================================"
+
+# docker tag $IMAGE_NAME $DOCKER_REPO:$SOURCE_COMMIT
+# docker tag $IMAGE_NAME $DOCKER_REPO:$SOURCE_BRANCH
+
+# docker push $DOCKER_REPO:$SOURCE_COMMIT
+docker push $DOCKER_REPO:$SOURCE_BRANCH
+
+USE_REMOTE_DOCKER_CACHE=${USE_REMOTE_DOCKER_CACHE:-true}
+
+if [ "${USE_REMOTE_DOCKER_CACHE}" = true ] ; then
+    # Push (vendor|frontend) image to remote repository for next build
+    docker push $DOCKER_REPO:vendor
+    docker push $DOCKER_REPO:frontend
+fi
+
+# # Git hash and tags
+# GIT_VERSION=$(git describe --always --abbrev --tags --long)
+# docker tag ${IMAGE_NAME} ${DOCKER_REPO}:${GIT_VERSION}
+# # Log in to Docker Hub and push
+# echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
+# docker push ${DOCKER_REPO}:${GIT_VERSION}
